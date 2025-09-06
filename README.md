@@ -3,18 +3,20 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>ค้นหาข้อมูลสินค้า</title>
+  <title>เช็คสินค้า</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
+    body { font-family: Arial, sans-serif; padding: 20px; }
     input, button { padding: 8px; font-size: 16px; }
-    button { cursor: pointer; }
-    #results { margin-top: 20px; white-space: pre-wrap; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f5f5f5; }
+    .match { color: green; }
+    .mismatch { color: red; }
   </style>
 </head>
 <body>
 
-  <h1>ฟอร์มนำเข้าข้อมูล</h1>
-
+  <h2>ค้นหาข้อมูลสินค้า</h2>
   <label for="orderCode">กรอก Order Code:</label><br/>
   <input type="text" id="orderCode" placeholder="เช่น 2509-475-00679" size="30" />
   <button id="searchBtn">ค้นหา</button>
@@ -22,12 +24,25 @@
   <div id="results"></div>
 
   <script>
-    const apiUrl = 'https://script.google.com/macros/s/AKfycbx4r90IvX-QOH-egVjmJQp6ddnv6JpFHkA9PAdvZ0nH8xzDrjPDYBDDj6s1_W1RQHxz/exec';
+    const apiUrl = 'https://script.google.com/macros/s/AKfycbwt3QcIwpL2qGmWQe9R72O6SLdc-f5xZc7oZFd3wcJatBdZarhv4a-Oeardi1RuMOnL/exec';
+
+    // ฟังก์ชันเติม Order Code ที่หายไป
+    function fillOrderCode(data) {
+      let lastOrderCode = null;
+      return data.map(row => {
+        if (row["Order Code"]) {
+          lastOrderCode = row["Order Code"];
+        } else {
+          row["Order Code"] = lastOrderCode;
+        }
+        return row;
+      });
+    }
 
     document.getElementById('searchBtn').addEventListener('click', async () => {
       const code = document.getElementById('orderCode').value.trim();
       const resultsDiv = document.getElementById('results');
-      resultsDiv.textContent = 'กำลังค้นหา...';
+      resultsDiv.innerHTML = 'กำลังโหลดข้อมูล...';
 
       if (!code) {
         resultsDiv.textContent = 'กรุณากรอก Order Code ก่อน';
@@ -36,9 +51,8 @@
 
       try {
         const response = await fetch(apiUrl);
-        const data = await response.json();
-
-        // กรองข้อมูลที่มี Order Code ตรงกับที่กรอก
+        const rawData = await response.json();
+        const data = fillOrderCode(rawData);
         const filtered = data.filter(item => item['Order Code'] === code);
 
         if (filtered.length === 0) {
@@ -46,18 +60,65 @@
           return;
         }
 
-        // แสดงข้อมูลเป็นข้อความสวยๆ
-        let output = `ผลการค้นหา Order Code: ${code}\n\n`;
-        filtered.forEach(item => {
-          output += `No: ${item['No']}\n`;
-          output += `Item Number: ${item['Item Number']}\n`;
-          output += `Sokochan Code: ${item['Sokochan Code']}\n`;
-          output += `Item Name: ${item['Item Name']}\n`;
-          output += `Quantity: ${item['Quantity']}\n`;
-          output += '-----------------------\n';
+        // สร้างตาราง
+        let html = `
+          <table>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Item Number</th>
+                <th>Item Name</th>
+                <th>Quantity</th>
+                <th>นับได้จริง (Counted)</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        filtered.forEach((item, index) => {
+          html += `
+            <tr>
+              <td>${item['No']}</td>
+              <td>${item['Item Number']}</td>
+              <td>${item['Item Name']}</td>
+              <td>${item['Quantity']}</td>
+              <td>
+                <input type="number" min="0" class="counted" data-expected="${item['Quantity']}" />
+              </td>
+              <td class="status">-</td>
+            </tr>
+          `;
         });
 
-        resultsDiv.textContent = output;
+        html += `
+            </tbody>
+          </table>
+          <button id="checkBtn">ตรวจสอบจำนวน</button>
+        `;
+
+        resultsDiv.innerHTML = html;
+
+        // เช็คค่าที่กรอก
+        document.getElementById('checkBtn').addEventListener('click', () => {
+          const inputs = document.querySelectorAll('.counted');
+          inputs.forEach((input, i) => {
+            const expected = parseInt(input.dataset.expected);
+            const actual = parseInt(input.value);
+            const statusCell = input.parentElement.nextElementSibling;
+
+            if (isNaN(actual)) {
+              statusCell.textContent = 'กรุณากรอกจำนวน';
+              statusCell.className = 'status mismatch';
+            } else if (actual === expected) {
+              statusCell.textContent = '✔️ ตรงกัน';
+              statusCell.className = 'status match';
+            } else {
+              statusCell.textContent = `❌ ไม่ตรง (ควรเป็น ${expected})`;
+              statusCell.className = 'status mismatch';
+            }
+          });
+        });
 
       } catch (error) {
         console.error(error);
