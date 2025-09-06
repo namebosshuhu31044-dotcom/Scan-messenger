@@ -13,7 +13,7 @@
 </head>
 <body>
 
-  <h1>ค้นหาข้อมูลสินค้าใน Google Sheet</h1>
+  <h1>ฟอร์มนำเข้าข้อมูล</h1>
 
   <label for="orderCode">กรอก Order Code:</label><br/>
   <input type="text" id="orderCode" placeholder="เช่น 2509-475-00679" size="30" />
