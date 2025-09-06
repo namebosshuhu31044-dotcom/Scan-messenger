@@ -12,6 +12,14 @@
     th { background-color: #f5f5f5; }
     .match { color: green; }
     .mismatch { color: red; }
+    .status { font-weight: bold; }
+    .scanning { margin-top: 30px; }
+    .btn-group { display: flex; gap: 5px; }
+    .btn-count {
+      padding: 5px 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -24,9 +32,9 @@
   <div id="results"></div>
 
   <script>
-    const apiUrl = 'https://script.google.com/macros/s/AKfycbwt3QcIwpL2qGmWQe9R72O6SLdc-f5xZc7oZFd3wcJatBdZarhv4a-Oeardi1RuMOnL/exec';
+    const apiUrl = 'https://script.google.com/macros/s/AKfycbwH36554JHLEeFGvpRHm0FDtw1iemeX_ISL-lbJN0n7_20IoYFelOWRiB4kxzvn3iTT/exec';
 
-    // ฟังก์ชันเติม Order Code ที่หายไป
+    // เติม Order Code ที่หายไป
     function fillOrderCode(data) {
       let lastOrderCode = null;
       return data.map(row => {
@@ -60,8 +68,12 @@
           return;
         }
 
-        // สร้างตาราง
         let html = `
+          <div class="scanning">
+            <label for="scanInput"><strong>สแกนสินค้า:</strong></label><br/>
+            <input type="text" id="scanInput" placeholder="สแกน Item Number หรือ -Item เพื่อลด" autofocus />
+          </div>
+
           <table>
             <thead>
               <tr>
@@ -69,7 +81,8 @@
                 <th>Item Number</th>
                 <th>Item Name</th>
                 <th>Quantity</th>
-                <th>นับได้จริง (Counted)</th>
+                <th>นับได้จริง</th>
+                <th>ลดยอด</th>
                 <th>สถานะ</th>
               </tr>
             </thead>
@@ -78,13 +91,18 @@
 
         filtered.forEach((item, index) => {
           html += `
-            <tr>
+            <tr data-code="${item['Item Number']}" data-index="${index}">
               <td>${item['No']}</td>
               <td>${item['Item Number']}</td>
               <td>${item['Item Name']}</td>
               <td>${item['Quantity']}</td>
               <td>
-                <input type="number" min="0" class="counted" data-expected="${item['Quantity']}" />
+                <input type="number" min="0" class="counted" data-expected="${item['Quantity']}" value="0" readonly />
+              </td>
+              <td>
+                <div class="btn-group">
+                  <button class="btn-count" onclick="adjustCount('${item['Item Number']}', -1)">➖</button>
+                </div>
               </td>
               <td class="status">-</td>
             </tr>
@@ -94,30 +112,51 @@
         html += `
             </tbody>
           </table>
-          <button id="checkBtn">ตรวจสอบจำนวน</button>
         `;
 
         resultsDiv.innerHTML = html;
 
-        // เช็คค่าที่กรอก
-        document.getElementById('checkBtn').addEventListener('click', () => {
-          const inputs = document.querySelectorAll('.counted');
-          inputs.forEach((input, i) => {
-            const expected = parseInt(input.dataset.expected);
-            const actual = parseInt(input.value);
-            const statusCell = input.parentElement.nextElementSibling;
+        // ช่องสแกนสินค้า
+        document.getElementById('scanInput').addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            let scanned = e.target.value.trim();
+            e.target.value = '';
 
-            if (isNaN(actual)) {
-              statusCell.textContent = 'กรุณากรอกจำนวน';
-              statusCell.className = 'status mismatch';
-            } else if (actual === expected) {
-              statusCell.textContent = '✔️ ตรงกัน';
-              statusCell.className = 'status match';
-            } else {
-              statusCell.textContent = `❌ ไม่ตรง (ควรเป็น ${expected})`;
-              statusCell.className = 'status mismatch';
+            let decrease = false;
+            if (scanned.startsWith('-')) {
+              decrease = true;
+              scanned = scanned.substring(1);
             }
-          });
+
+            const row = document.querySelector(`tr[data-code="${scanned}"]`);
+            if (row) {
+              const input = row.querySelector('.counted');
+              const expected = parseInt(input.dataset.expected);
+              let current = parseInt(input.value) || 0;
+
+              if (decrease) {
+                if (current > 0) current -= 1;
+              } else {
+                current += 1;
+              }
+
+              input.value = current;
+
+              const status = row.querySelector('.status');
+              if (current === expected) {
+                status.textContent = '✔️ ครบแล้ว';
+                status.className = 'status match';
+              } else if (current > expected) {
+                status.textContent = `❌ เกิน (ควรเป็น ${expected})`;
+                status.className = 'status mismatch';
+              } else {
+                status.textContent = `➕ นับได้ ${current} / ${expected}`;
+                status.className = 'status';
+              }
+            } else {
+              alert('ไม่พบสินค้านี้ในรายการ');
+            }
+          }
         });
 
       } catch (error) {
@@ -125,6 +164,33 @@
         resultsDiv.textContent = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
       }
     });
+
+    // ฟังก์ชันลดจำนวน
+    function adjustCount(itemCode, change) {
+      const row = document.querySelector(`tr[data-code="${itemCode}"]`);
+      if (!row) return;
+
+      const input = row.querySelector('.counted');
+      const expected = parseInt(input.dataset.expected);
+      let current = parseInt(input.value) || 0;
+
+      current += change;
+      if (current < 0) current = 0;
+
+      input.value = current;
+
+      const status = row.querySelector('.status');
+      if (current === expected) {
+        status.textContent = '✔️ ครบแล้ว';
+        status.className = 'status match';
+      } else if (current > expected) {
+        status.textContent = `❌ เกิน (ควรเป็น ${expected})`;
+        status.className = 'status mismatch';
+      } else {
+        status.textContent = `➕ นับได้ ${current} / ${expected}`;
+        status.className = 'status';
+      }
+    }
   </script>
 
 </body>
