@@ -1,4 +1,3 @@
-# Scan Messenger
 <!DOCTYPE html>
 <html lang="th">
 <head>
